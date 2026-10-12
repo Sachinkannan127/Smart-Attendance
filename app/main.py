@@ -1,4 +1,5 @@
 import calendar
+import json
 import logging
 import os
 import re
@@ -8,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
+from bson import json_util
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -54,6 +56,7 @@ async def lifespan(app: FastAPI):
         db.employees.create_index([("emp_code", 1)], unique=True, name="uniq_emp_code")
         db.employees.create_index([("department", 1), ("emp_code", 1)], name="idx_dept_emp_code")
         db.employees.create_index([("department", 1), ("joined_on", 1)], name="idx_dept_joined_on")
+        db.employees.create_index([("joined_on", 1)], name="idx_joined_on")
 
         # attendance_logs indexes
         db.attendance_logs.create_index([("emp_code", 1), ("date", 1)], unique=True, name="uniq_emp_code_date")
@@ -1518,5 +1521,175 @@ def get_department_trend(
         })
 
     return output
+
+
+# ==============================================================================
+# 7. EXPLAIN ENDPOINT (Stage 4)
+# ==============================================================================
+
+@app.get("/admin/explain/{endpoint}")
+def explain_endpoint(
+    endpoint: Literal["attendance_list", "employee_monthly", "department_summary", "late_leaderboard", "department_trend"],
+    emp_code: Optional[str] = Query(None, description="Employee code"),
+    month: Optional[str] = Query(None, description="Month in YYYY-MM format"),
+    department: Optional[str] = Query(None, description="Department name"),
+    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD for attendance list"),
+    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD for attendance list"),
+    status_filter: Optional[Literal["PRESENT", "WFH", "ON_DUTY", "ABSENT", "LEAVE"]] = Query(None, alias="status", description="Status filter"),
+    limit: Optional[int] = Query(10, ge=1, le=50, description="Rank limit for late leaderboard"),
+    from_date: Optional[str] = Query(None, alias="from", description="Start date YYYY-MM-DD for trend"),
+    to_date: Optional[str] = Query(None, alias="to", description="End date YYYY-MM-DD for trend"),
+):
+    """
+    GET /admin/explain/{endpoint}:
+    endpoint in attendance_list, employee_monthly, department_summary, late_leaderboard, department_trend.
+    Same query params as the real endpoint; missing required -> 422.
+    Build the query/pipeline with the SAME builder functions the real endpoint uses,
+    run explain with executionStats, return {"endpoint","collection","explain"} (JSON-safe via bson.json_util).
+    Plans must show IXSCAN and no COLLSCAN on ~100k records (use hint if needed).
+    """
+    if endpoint == "attendance_list":
+        if emp_code is not None and not EMP_CODE_REGEX.match(emp_code):
+            raise HTTPException(status_code=422, detail="emp_code must match pattern ^EMP\\d{4,6}$")
+        if date_from is not None:
+            if not DATE_REGEX.match(date_from):
+                raise HTTPException(status_code=422, detail="date_from must match YYYY-MM-DD format")
+            try:
+                datetime.strptime(date_from, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid calendar date for date_from")
+        if date_to is not None:
+            if not DATE_REGEX.match(date_to):
+                raise HTTPException(status_code=422, detail="date_to must match YYYY-MM-DD format")
+            try:
+                datetime.strptime(date_to, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid calendar date for date_to")
+        if date_from is not None and date_to is not None and date_from > date_to:
+            raise HTTPException(status_code=422, detail="date_from must be less than or equal to date_to")
+
+        collection = "attendance_logs"
+        query = build_attendance_list_query(emp_code, date_from, date_to, status_filter)
+        cmd = {
+            "explain": {
+                "find": collection,
+                "filter": query,
+                "sort": {"date": -1, "emp_code": 1},
+                "hint": "idx_date_desc_emp_code",
+            },
+            "verbosity": "executionStats",
+        }
+
+    elif endpoint == "employee_monthly":
+        if not emp_code:
+            raise HTTPException(status_code=422, detail="Missing required query parameter: emp_code")
+        if not month:
+            raise HTTPException(status_code=422, detail="Missing required query parameter: month")
+        if not EMP_CODE_REGEX.match(emp_code):
+            raise HTTPException(status_code=422, detail="emp_code must match pattern ^EMP\\d{4,6}$")
+
+        start_date_str, end_date_str, _, _ = get_month_bounds(month)
+        collection = "attendance_logs"
+        pipeline = build_employee_monthly_pipeline(emp_code, start_date_str, end_date_str)
+        cmd = {
+            "explain": {
+                "aggregate": collection,
+                "pipeline": pipeline,
+                "cursor": {},
+                "hint": "uniq_emp_code_date",
+            },
+            "verbosity": "executionStats",
+        }
+
+    elif endpoint == "department_summary":
+        if not month:
+            raise HTTPException(status_code=422, detail="Missing required query parameter: month")
+
+        start_date_str, end_date_str, _, _ = get_month_bounds(month)
+        collection = "employees"
+        pipeline = build_department_summary_pipeline(start_date_str, end_date_str, department)
+        hint = "idx_dept_joined_on" if department else "idx_joined_on"
+        cmd = {
+            "explain": {
+                "aggregate": collection,
+                "pipeline": pipeline,
+                "cursor": {},
+                "hint": hint,
+            },
+            "verbosity": "executionStats",
+        }
+
+    elif endpoint == "late_leaderboard":
+        if not month:
+            raise HTTPException(status_code=422, detail="Missing required query parameter: month")
+
+        start_date_str, end_date_str, _, _ = get_month_bounds(month)
+        collection = "attendance_logs"
+        pipeline = build_late_leaderboard_pipeline(start_date_str, end_date_str, limit or 10, department)
+        cmd = {
+            "explain": {
+                "aggregate": collection,
+                "pipeline": pipeline,
+                "cursor": {},
+                "hint": "idx_date_late_emp",
+            },
+            "verbosity": "executionStats",
+        }
+
+    elif endpoint == "department_trend":
+        if not department:
+            raise HTTPException(status_code=422, detail="Missing required query parameter: department")
+        if not from_date:
+            raise HTTPException(status_code=422, detail="Missing required query parameter: from")
+        if not to_date:
+            raise HTTPException(status_code=422, detail="Missing required query parameter: to")
+
+        if not DATE_REGEX.match(from_date):
+            raise HTTPException(status_code=422, detail="'from' must match YYYY-MM-DD format")
+        try:
+            d_from = datetime.strptime(from_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid calendar date for 'from'")
+
+        if not DATE_REGEX.match(to_date):
+            raise HTTPException(status_code=422, detail="'to' must match YYYY-MM-DD format")
+        try:
+            d_to = datetime.strptime(to_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid calendar date for 'to'")
+
+        if d_to < d_from:
+            raise HTTPException(status_code=422, detail="'to' date must be greater than or equal to 'from' date")
+
+        day_count = (d_to - d_from).days + 1
+        if day_count > 92:
+            raise HTTPException(status_code=422, detail="Date range cannot exceed 92 days")
+
+        collection = "employees"
+        pipeline = build_department_trend_pipeline(department, from_date, to_date)
+        cmd = {
+            "explain": {
+                "aggregate": collection,
+                "pipeline": pipeline,
+                "cursor": {},
+                "hint": "idx_dept_emp_code",
+            },
+            "verbosity": "executionStats",
+        }
+
+    try:
+        raw_explain = db.command(cmd)
+    except PyMongoError as exc:
+        logger.error(f"Error running explain for {endpoint}: {exc}")
+        raise HTTPException(status_code=503, detail="Database error during explain")
+
+    explain_safe = json.loads(json_util.dumps(raw_explain))
+
+    return {
+        "endpoint": endpoint,
+        "collection": collection,
+        "explain": explain_safe,
+    }
+
 
 
