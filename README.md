@@ -2,7 +2,9 @@
 
 Employee Attendance & Analytics API with an interactive, human-crafted dashboard built with **Python 3.11+**, **FastAPI**, **PyMongo** (sync, `tz_aware=True`), and **MongoDB 6+/7** (tested on MongoDB Atlas).
 
-![Smart Attendance Dashboard](docs/dashboard.png)
+| **⚡ Punch Desk & Live Kiosk** | **👥 Employee Directory & Workforce Hub** |
+| :---: | :---: |
+| ![Smart Attendance Dashboard](docs/dashboard.png) | ![Employee Directory](docs/employees_directory.png) |
 
 ---
 
