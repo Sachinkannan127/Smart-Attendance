@@ -52,7 +52,14 @@ TIME_REGEX = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create indexes idempotently at startup
+    # 1. Ping MongoDB and log connection status
+    try:
+        ping_res = client.admin.command("ping")
+        logger.info(f"MongoDB connection verified successfully: ping command returned {ping_res} (db='{MONGO_DB}')")
+    except Exception as exc:
+        logger.error(f"MongoDB connection ping failed during startup: {exc}")
+
+    # 2. Create indexes idempotently at startup
     try:
         # employees indexes
         db.employees.create_index([("emp_code", 1)], unique=True, name="uniq_emp_code")
@@ -1010,7 +1017,8 @@ def health():
     GET /health returns 200 {"status":"ok"} only if Mongo ping succeeds, else 503.
     """
     try:
-        client.admin.command("ping")
+        ping_res = client.admin.command("ping")
+        logger.info(f"MongoDB ping check succeeded: {ping_res}")
         return {"status": "ok"}
     except Exception as exc:
         logger.warning(f"Health check failed: {exc}")
