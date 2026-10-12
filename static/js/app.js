@@ -686,9 +686,18 @@ async function loadDeptSummary(month) {
 
 async function loadDeptTrend(department, month) {
   try {
-    const res = await fetch(`${API_BASE}/analytics/departments/${encodeURIComponent(department)}/trend?month=${month}`);
+    const [y, m] = month.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const from = `${month}-01`;
+    const to = `${month}-${String(lastDay).padStart(2, '0')}`;
+    const res = await fetch(`${API_BASE}/analytics/departments/${encodeURIComponent(department)}/trend?from=${from}&to=${to}`);
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to load trend');
+    }
     const data = await res.json();
-    renderTrendSvg(data.trend || []);
+    const points = Array.isArray(data) ? data : (data.trend || []);
+    renderTrendSvg(points);
   } catch (err) {
     showToast(`Trend error: ${err.message}`, 'error');
   }

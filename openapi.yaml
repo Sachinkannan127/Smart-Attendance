@@ -473,7 +473,7 @@ paths:
   /analytics/departments/{department}/trend:
     get:
       summary: Get Department Trend
-      description: 'GET /analytics/departments/{department}/trend?from&to:
+      description: 'GET /analytics/departments/{department}/trend?from&to (or ?month=YYYY-MM):
 
         exactly one row per calendar day in [from,to] including weekends and empty
         days (use $densify, no Python loops).
@@ -498,20 +498,34 @@ paths:
           title: Department
       - name: from
         in: query
-        required: true
+        required: false
         schema:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           description: Start date YYYY-MM-DD
           title: From
         description: Start date YYYY-MM-DD
       - name: to
         in: query
-        required: true
+        required: false
         schema:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           description: End date YYYY-MM-DD
           title: To
         description: End date YYYY-MM-DD
+      - name: month
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Month in YYYY-MM format
+          title: Month
+        description: Month in YYYY-MM format
       responses:
         '200':
           description: Successful Response

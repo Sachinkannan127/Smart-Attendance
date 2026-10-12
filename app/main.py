@@ -1542,17 +1542,24 @@ def get_late_leaderboard(
 @app.get("/analytics/departments/{department}/trend", response_model=List[DepartmentTrendItem])
 def get_department_trend(
     department: str,
-    from_date: str = Query(..., alias="from", description="Start date YYYY-MM-DD"),
-    to_date: str = Query(..., alias="to", description="End date YYYY-MM-DD"),
+    from_date: Optional[str] = Query(None, alias="from", description="Start date YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, alias="to", description="End date YYYY-MM-DD"),
+    month: Optional[str] = Query(None, description="Month in YYYY-MM format"),
 ):
     """
-    GET /analytics/departments/{department}/trend?from&to:
+    GET /analytics/departments/{department}/trend?from&to (or ?month=YYYY-MM):
     exactly one row per calendar day in [from,to] including weekends and empty days (use $densify, no Python loops).
     Fields: date, is_working_day (Mon-Fri), headcount (joined_on <= day), present_count (half day 0.5, any weekday/weekend),
     late_count, attendance_rate (present/headcount, 4 dp half-up, only on working days with headcount > 0 else null; working day with no records = 0.0),
     moving_avg_7d (mean of non-null rates over current + up to 6 preceding rows inside the range, null if none, 4 dp half-up, via $setWindowFields).
     404 if the department has no employees; 422 if to < from or range > 92 days.
     """
+    if from_date is None or to_date is None:
+        if month is not None:
+            from_date, to_date, _, _ = get_month_bounds(month)
+        else:
+            raise HTTPException(status_code=422, detail="Query parameters 'from' and 'to' (or 'month') are required")
+
     if not DATE_REGEX.match(from_date):
         raise HTTPException(status_code=422, detail="'from' must match YYYY-MM-DD format")
     try:
