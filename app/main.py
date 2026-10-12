@@ -12,6 +12,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional
 from bson import json_util
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
@@ -67,7 +68,6 @@ async def lifespan(app: FastAPI):
     except PyMongoError as exc:
         logger.error(f"Error creating MongoDB indexes: {exc}")
     yield
-    client.close()
 
 
 app = FastAPI(title="Employee Attendance & Analytics API", lifespan=lifespan)
@@ -77,7 +77,7 @@ app = FastAPI(title="Employee Attendance & Analytics API", lifespan=lifespan)
 def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()},
+        content={"detail": jsonable_encoder(exc.errors())},
     )
 
 
