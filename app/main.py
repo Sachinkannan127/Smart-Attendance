@@ -14,7 +14,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -71,6 +72,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Employee Attendance & Analytics API", lifespan=lifespan)
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+if os.path.exists(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.exception_handler(RequestValidationError)
@@ -984,6 +989,20 @@ def build_department_trend_pipeline(
 # ==============================================================================
 # 5. ENDPOINTS (Stage 1)
 # ==============================================================================
+
+@app.get("/", response_class=FileResponse)
+def serve_frontend():
+    """
+    GET /: Serves the Smart Attendance dashboard UI.
+    """
+    index_file = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    return JSONResponse(
+        status_code=200,
+        content={"status": "ok", "message": "Smart Attendance API is running. Visit /docs for OpenAPI documentation."},
+    )
+
 
 @app.get("/health")
 def health():

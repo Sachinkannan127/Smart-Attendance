@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Attendance · Enterprise Pulse</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand-wrapper">
+        <div class="brand-icon">⏱️</div>
+        <div class="brand-info">
+          <h1>Smart Attendance</h1>
+          <p>Enterprise Pulse & Workforce Analytics</p>
+        </div>
+      </div>
+
+      <div class="header-status-bar">
+        <div id="dbStatusBadge" class="status-badge">
+          <span class="indicator-dot"></span>
+          <span id="dbStatusText">Checking DB...</span>
+        </div>
+
+        <div class="clock-card">
+          <span class="clock-time" id="istClock">--:--:--</span>
+          <span class="clock-zone">IST (UTC+5:30)</span>
+        </div>
+
+        <button id="seedDemoBtn" class="btn btn-secondary btn-sm" title="Seed 3 sample employees and initial records for instant testing">
+          ⚡ Seed Sample Data
+        </button>
+      </div>
+    </header>
+
+    <!-- Nav Tabs -->
+    <nav class="nav-tabs" role="tablist">
+      <button class="tab-btn active" data-tab="punchDesk">⚡ Punch Desk</button>
+      <button class="tab-btn" data-tab="employees">👥 Employees</button>
+      <button class="tab-btn" data-tab="attendance">📋 Daily Logs</button>
+      <button class="tab-btn" data-tab="analytics">📊 Analytics Hub</button>
+      <button class="tab-btn" data-tab="explain">🔍 Query Explain</button>
+    </nav>
+
+    <!-- TAB 1: PUNCH DESK -->
+    <section id="punchDesk" class="tab-content active">
+      <div class="grid-2">
+        <!-- Punch Action Form -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title"><span>🕒</span> Quick Attendance Punch</h2>
+            <span class="card-subtitle">Real-time shift evaluation</span>
+          </div>
+
+          <form id="punchForm">
+            <div class="form-group">
+              <label class="form-label" for="punchEmpCode">Select Employee</label>
+              <select id="punchEmpCode" class="form-select" required>
+                <option value="">-- Choose Employee --</option>
+              </select>
+              <div id="selectedEmpShiftHint" class="form-hint"></div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Punch Mode</label>
+              <div style="display: flex; gap: 1rem; margin-top: 0.25rem;">
+                <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+                  <input type="radio" name="punchMode" value="now" checked> Current Time (IST)
+                </label>
+                <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;">
+                  <input type="radio" name="punchMode" value="custom"> Custom Timestamp
+                </label>
+              </div>
+            </div>
+
+            <div id="customTimestampGroup" class="form-group" style="display: none;">
+              <label class="form-label" for="customPunchDateTime">Custom Date & Time (IST)</label>
+              <input type="datetime-local" id="customPunchDateTime" class="form-input">
+              <div class="form-hint">Simulate edge cases (e.g., late grace period, overnight shift)</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="punchStatus">Attendance Status (for Punch In)</label>
+              <select id="punchStatus" class="form-select">
+                <option value="PRESENT" selected>PRESENT (Office)</option>
+                <option value="WFH">WFH (Work from Home)</option>
+                <option value="ON_DUTY">ON_DUTY (Field/Client)</option>
+              </select>
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+              <button type="button" id="btnPunchIn" class="btn btn-primary" style="flex: 1;">
+                📥 Punch In
+              </button>
+              <button type="button" id="btnPunchOut" class="btn btn-secondary" style="flex: 1;">
+                📤 Punch Out
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Live Punch Result / Today's Summary -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title"><span>📋</span> Punch Receipt & Status</h2>
+            <span class="card-subtitle">Last recorded activity</span>
+          </div>
+
+          <div id="punchReceiptArea">
+            <div class="empty-state">
+              <div class="empty-state-icon">⏱️</div>
+              <p>No recent punch activity in this session.</p>
+              <p class="form-hint">Select an employee and record a punch to see live calculations.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: EMPLOYEES -->
+    <section id="employees" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title"><span>👥</span> Employee Directory</h2>
+            <span class="card-subtitle">Manage company workforce and shift timings</span>
+          </div>
+          <button id="openAddEmpModalBtn" class="btn btn-primary btn-sm">+ Add Employee</button>
+        </div>
+
+        <!-- Filter bar -->
+        <div style="display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+          <input type="text" id="empSearchInput" class="form-input" placeholder="Search by name or code..." style="max-width: 280px;">
+          <select id="empDeptFilter" class="form-select" style="max-width: 220px;">
+            <option value="">All Departments</option>
+          </select>
+        </div>
+
+        <!-- Table -->
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Emp Code</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Department</th>
+                <th>Shift Window</th>
+                <th>Joined On</th>
+              </tr>
+            </thead>
+            <tbody id="employeesTableBody">
+              <tr><td colspan="6" style="text-align: center; color: var(--text-dim);">Loading employees...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+          <span id="empPaginationInfo" class="form-hint">Showing 0 employees</span>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="empPrevPage" class="btn btn-secondary btn-sm" disabled>&larr; Prev</button>
+            <button id="empNextPage" class="btn btn-secondary btn-sm" disabled>Next &rarr;</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: ATTENDANCE LOGS -->
+    <section id="attendance" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title"><span>📋</span> Daily Attendance Logs</h2>
+            <span class="card-subtitle">Filter logs and perform manager regularization</span>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div style="display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; align-items: flex-end;">
+          <div>
+            <label class="form-label" style="margin-bottom: 0.2rem;">Date</label>
+            <input type="date" id="attDateFilter" class="form-input" style="width: 170px;">
+          </div>
+          <div>
+            <label class="form-label" style="margin-bottom: 0.2rem;">Department</label>
+            <select id="attDeptFilter" class="form-select" style="width: 170px;">
+              <option value="">All Departments</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" style="margin-bottom: 0.2rem;">Status</label>
+            <select id="attStatusFilter" class="form-select" style="width: 150px;">
+              <option value="">All Statuses</option>
+              <option value="PRESENT">PRESENT</option>
+              <option value="WFH">WFH</option>
+              <option value="ON_DUTY">ON_DUTY</option>
+              <option value="HALF_DAY">HALF_DAY</option>
+              <option value="ABSENT">ABSENT</option>
+              <option value="LEAVE">LEAVE</option>
+            </select>
+          </div>
+          <button id="btnRefreshAttendance" class="btn btn-secondary btn-sm" style="margin-bottom: 2px;">Filter</button>
+        </div>
+
+        <!-- Table -->
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Emp Code</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Punch In</th>
+                <th>Punch Out</th>
+                <th>Hours</th>
+                <th>Late (Min)</th>
+                <th>Overtime</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="attendanceTableBody">
+              <tr><td colspan="9" style="text-align: center; color: var(--text-dim);">No attendance records found for selected filter.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: ANALYTICS HUB -->
+    <section id="analytics" class="tab-content">
+      <!-- Section Controls -->
+      <div class="card">
+        <div style="display: flex; gap: 1.5rem; align-items: flex-end; flex-wrap: wrap;">
+          <div>
+            <label class="form-label">Analytics Month</label>
+            <input type="month" id="analyticsMonthPicker" class="form-input" style="width: 180px;">
+          </div>
+          <div>
+            <label class="form-label">Employee for Monthly Card</label>
+            <select id="analyticsEmpSelect" class="form-select" style="width: 220px;">
+              <option value="">-- Choose Employee --</option>
+            </select>
+          </div>
+          <button id="btnRefreshAnalytics" class="btn btn-primary btn-sm">Refresh Analytics</button>
+        </div>
+      </div>
+
+      <!-- Grid: Employee Card & Leaderboard -->
+      <div class="grid-2">
+        <!-- Monthly Employee Stats -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><span>👤</span> Monthly Employee Metrics</h3>
+            <span id="monthlyEmpBadge" class="card-subtitle">Select employee above</span>
+          </div>
+          <div id="monthlyEmpStatsGrid" class="grid-2">
+            <div class="stat-box">
+              <div class="stat-label">Working Days (Mon-Fri)</div>
+              <div class="stat-val" id="statWorkingDays">-</div>
+              <div class="stat-hint">Excludes weekends</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Present Days</div>
+              <div class="stat-val" id="statPresentDays">-</div>
+              <div class="stat-hint">Half-day = 0.5</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Attendance Rate</div>
+              <div class="stat-val" id="statAttendancePct" style="color: var(--primary);">-</div>
+              <div class="stat-hint">Present / Working</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Late Punches</div>
+              <div class="stat-val" id="statLateCount" style="color: var(--danger);">-</div>
+              <div class="stat-hint" id="statTotalLateMins">0 total late minutes</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Late Leaderboard -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><span>🏆</span> Late Punches Leaderboard</h3>
+            <span class="card-subtitle">Strict MongoDB $setWindowFields $rank</span>
+          </div>
+          <div class="table-container" style="max-height: 250px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Emp Code</th>
+                  <th>Late Count</th>
+                  <th>Total Late Mins</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboardTableBody">
+                <tr><td colspan="4" style="text-align: center; color: var(--text-dim);">No data</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Department Summary & 7-Day Trend Chart -->
+      <div class="grid-2">
+        <!-- Dept Summary -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><span>🏢</span> Department Summary</h3>
+            <span class="card-subtitle">Aggregated via $lookup from employees</span>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Department</th>
+                  <th>Headcount</th>
+                  <th>Attendance %</th>
+                  <th>Late Count</th>
+                  <th>Overtime Mins</th>
+                </tr>
+              </thead>
+              <tbody id="deptSummaryTableBody">
+                <tr><td colspan="5" style="text-align: center; color: var(--text-dim);">No data</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 7-Day Trend Chart -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title"><span>📈</span> 7-Day Attendance Trend</h3>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <select id="trendDeptSelect" class="form-select form-select-sm" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;">
+                <option value="">Select Dept</option>
+              </select>
+            </div>
+          </div>
+          <p class="form-hint" style="margin-bottom: 0.5rem;">Gapless calendar timeline via <code>$densify</code> with 7-day moving average</p>
+          <div class="chart-container" id="trendChartContainer">
+            <svg class="trend-svg" id="trendSvg" viewBox="0 0 500 240"></svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: QUERY EXPLAIN -->
+    <section id="explain" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title"><span>🔍</span> MongoDB Execution Plan Inspector</h2>
+            <span class="card-subtitle">Verify IXSCAN index usage and executionStats from <code>GET /admin/explain/{endpoint}</code></span>
+          </div>
+          <div style="display: flex; gap: 0.75rem;">
+            <select id="explainEndpointSelect" class="form-select" style="max-width: 250px;">
+              <option value="attendance-list">GET /attendance (List)</option>
+              <option value="employee-monthly">GET Monthly Analytics</option>
+              <option value="department-summary">GET Dept Summary</option>
+              <option value="department-trend">GET Dept Trend</option>
+            </select>
+            <button id="btnRunExplain" class="btn btn-primary btn-sm">Inspect Execution</button>
+          </div>
+        </div>
+
+        <!-- Explain Stats Grid -->
+        <div class="grid-4" style="margin-bottom: 1.25rem;">
+          <div class="stat-box">
+            <div class="stat-label">Execution Time</div>
+            <div class="stat-val" id="explainTimeMs" style="color: var(--success);">-</div>
+            <div class="stat-hint">Milliseconds</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Winning Plan Stage</div>
+            <div class="stat-val" id="explainStage" style="font-size: 1.2rem; color: var(--primary);">-</div>
+            <div class="stat-hint">Expected: IXSCAN</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Docs Examined</div>
+            <div class="stat-val" id="explainDocs">-</div>
+            <div class="stat-hint">totalDocsExamined</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Keys Examined</div>
+            <div class="stat-val" id="explainKeys">-</div>
+            <div class="stat-hint">totalKeysExamined</div>
+          </div>
+        </div>
+
+        <!-- JSON Output Viewer -->
+        <div>
+          <label class="form-label">Full Execution Plan JSON</label>
+          <pre id="explainJsonViewer" style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1rem; color: #a5b4fc; font-size: 0.75rem; max-height: 380px; overflow-y: auto; font-family: monospace;">Select an endpoint above and click 'Inspect Execution'</pre>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- MODAL: ADD EMPLOYEE -->
+  <div id="addEmpModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Add New Employee</h3>
+        <button class="modal-close-btn" data-close="addEmpModal">&times;</button>
+      </div>
+      <form id="addEmpForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="newEmpCode">Employee Code *</label>
+            <input type="text" id="newEmpCode" class="form-input" placeholder="e.g. EMP1001" required>
+            <div class="form-hint">Must match pattern <code>^EMP\d{4,6}$</code></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newEmpName">Full Name *</label>
+            <input type="text" id="newEmpName" class="form-input" placeholder="e.g. Alice Smith" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newEmpEmail">Work Email *</label>
+            <input type="email" id="newEmpEmail" class="form-input" placeholder="alice@example.com" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newEmpDept">Department *</label>
+            <input type="text" id="newEmpDept" class="form-input" placeholder="e.g. Engineering" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="newEmpShiftStart">Shift Start *</label>
+              <input type="text" id="newEmpShiftStart" class="form-input" value="09:30" required>
+              <div class="form-hint">HH:MM (24-hr)</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="newEmpShiftEnd">Shift End *</label>
+              <input type="text" id="newEmpShiftEnd" class="form-input" value="18:30" required>
+              <div class="form-hint">HH:MM (24-hr)</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newEmpJoined">Joining Date *</label>
+            <input type="date" id="newEmpJoined" class="form-input" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="addEmpModal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Create Employee</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: REGULARIZE ATTENDANCE -->
+  <div id="regularizeModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Regularize Attendance Record</h3>
+        <button class="modal-close-btn" data-close="regularizeModal">&times;</button>
+      </div>
+      <form id="regularizeForm">
+        <div class="modal-body">
+          <input type="hidden" id="regEmpCode">
+          <input type="hidden" id="regDate">
+
+          <div style="background: rgba(15, 23, 42, 0.4); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 1rem;">
+            <div style="font-size: 0.82rem; color: var(--text-muted);">
+              Editing record for <strong id="regHeaderCode" style="color: #fff;">-</strong> on <strong id="regHeaderDate" style="color: #fff;">-</strong>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="regStatus">New Status (Optional)</label>
+            <select id="regStatus" class="form-select">
+              <option value="">-- Keep Current Status --</option>
+              <option value="PRESENT">PRESENT</option>
+              <option value="WFH">WFH</option>
+              <option value="ON_DUTY">ON_DUTY</option>
+              <option value="ABSENT">ABSENT</option>
+              <option value="LEAVE">LEAVE</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="regPunchIn">New Punch In (IST Datetime)</label>
+            <input type="datetime-local" id="regPunchIn" class="form-input">
+            <div class="form-hint">Leave blank to keep unchanged</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="regPunchOut">New Punch Out (IST Datetime)</label>
+            <input type="datetime-local" id="regPunchOut" class="form-input">
+            <div class="form-hint">Leave blank to keep unchanged</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="regReason">Reason for Regularization *</label>
+            <textarea id="regReason" class="form-textarea" rows="2" placeholder="e.g. Biometric sensor failure at main gate" required minlength="5"></textarea>
+            <div class="form-hint">Minimum 5 characters (audit requirement)</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="regManager">Manager Code *</label>
+            <input type="text" id="regManager" class="form-input" placeholder="e.g. MGR001" required>
+            <div class="form-hint">Recorded in immutable audit history</div>
+          </div>
+
+          <!-- Existing Audit History -->
+          <div id="regHistorySection" style="margin-top: 1.25rem; display: none;">
+            <label class="form-label">Previous Audit Trail</label>
+            <div class="history-timeline" id="regHistoryTimeline"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-close="regularizeModal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Apply Regularization</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- App Script -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
