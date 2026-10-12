@@ -359,6 +359,20 @@ class EmployeeCreate(BaseModel):
             raise ValueError("shift_start must differ from shift_end")
         return self
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "emp_code": "EMP1001",
+                "name": "Alice Smith",
+                "email": "alice@example.com",
+                "department": "Engineering",
+                "shift_start": "09:30",
+                "shift_end": "18:30",
+                "joined_on": "2026-01-15",
+            }
+        }
+    }
+
 
 class EmployeeResponse(BaseModel):
     emp_code: str
@@ -390,6 +404,15 @@ class PunchInRequest(BaseModel):
             raise ValueError("emp_code must match pattern ^EMP\\d{4,6}$")
         return v
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "emp_code": "EMP1001",
+                "status": "PRESENT",
+            }
+        }
+    }
+
 
 class PunchOutRequest(BaseModel):
     emp_code: str
@@ -402,6 +425,14 @@ class PunchOutRequest(BaseModel):
             raise ValueError("emp_code must match pattern ^EMP\\d{4,6}$")
         return v
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "emp_code": "EMP1001",
+            }
+        }
+    }
+
 
 class AttendancePatchRequest(BaseModel):
     status: Optional[Literal["PRESENT", "WFH", "ON_DUTY", "ABSENT", "LEAVE"]] = None
@@ -409,6 +440,16 @@ class AttendancePatchRequest(BaseModel):
     punch_out: Optional[StrictEpochMs] = None
     reason: str = Field(..., min_length=5, max_length=200)
     regularized_by: str = Field(..., min_length=1, max_length=50)
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "status": "PRESENT",
+                "reason": "Corrected missed punch by manager",
+                "regularized_by": "MGR001",
+            }
+        }
+    }
 
 
 class HistoryItem(BaseModel):
