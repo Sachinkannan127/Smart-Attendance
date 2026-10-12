@@ -10,35 +10,14 @@ The application utilizes MongoDB 6+/7 as its primary datastore, organized around
 1. `employees`: Master employee records, organizational metadata, and shift configurations.
 2. `attendance_logs`: Daily attendance records, shift timestamps, derived metrics, and immutable regularization audit logs.
 
-### Entity Relationship Diagram
-```mermaid
-erDiagram
-    EMPLOYEES ||--o{ ATTENDANCE_LOGS : "emp_code"
-    EMPLOYEES {
-        ObjectId _id "Internal BSON Identifier"
-        string emp_code "Unique Business Key (^EMP[0-9]{4,6}$)"
-        string name "1-100 characters"
-        string email "Regex-validated email"
-        string department "Department name"
-        string shift_start "HH:MM (24-hour)"
-        string shift_end "HH:MM (24-hour)"
-        string joined_on "YYYY-MM-DD"
-        datetime created_at "UTC Timestamp"
-    }
-    ATTENDANCE_LOGS {
-        ObjectId _id "Internal BSON Identifier"
-        string emp_code "Foreign Reference to employees.emp_code"
-        string date "Calendar record date in IST (YYYY-MM-DD)"
-        string status "PRESENT | WFH | ON_DUTY | LEAVE | ABSENT"
-        datetime punch_in "UTC Timestamp (nullable for ABSENT/LEAVE)"
-        datetime punch_out "UTC Timestamp (null until punched out)"
-        float work_hours "Duration in hours, 2 dp ROUND_HALF_UP"
-        int late_minutes "Lateness past shift start if >600s grace"
-        int overtime_minutes "Overtime past shift end if >=30m"
-        bool half_day "True if work_hours < 4.50"
-        array history "Array of regularization audit objects"
-    }
-```
+### Collection Relationships
+
+The data model establishes a **1-to-many relationship** between `employees` and `attendance_logs` linked via `emp_code`:
+
+| Parent Collection | Child Collection | Join Key | Cardinality | Integrity Mechanism |
+|---|---|---|---|---|
+| `employees` | `attendance_logs` | `emp_code` | 1 : N | Enforced by application-level validation and unique index `(emp_code, date)` |
+
 
 ---
 
