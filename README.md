@@ -26,6 +26,38 @@ The application serves a bespoke, dark-themed workforce operations dashboard dir
 
 ---
 
+## 📂 Production Directory Structure
+
+```
+Smart-Attendance/
+├── app/
+│   ├── __init__.py              # Python package root
+│   └── main.py                  # Self-contained API microservice: config, lifespan, pure rules, models, pipelines, & routes
+├── static/                      # Frontend UI assets (served at GET /)
+│   ├── css/
+│   │   └── style.css            # Bespoke dark-mode design system & micro-interactions
+│   ├── js/
+│   │   └── app.js               # Reactive client-side application logic & SVG charts
+│   └── index.html               # Responsive single-page dashboard
+├── tests/                       # Full integration test suite with brute-force Python references
+│   ├── __init__.py
+│   └── test_api.py              # 7 test suites validating all 11 endpoints & edge cases
+├── docs/                        # Project documentation assets & screenshots
+│   ├── dashboard.png            # Live Punch Desk & status banner preview
+│   └── employees_directory.png  # Employee Directory view preview
+├── Dockerfile                   # Production container definition (Python 3.11-slim)
+├── .dockerignore                # Container build exclusions
+├── pytest.ini                   # Pytest test discovery & warning filters
+├── requirements.txt             # Pinned production & test dependencies
+├── .env.example                 # Safe environment configuration template
+├── .gitignore                   # Excludes venv/, .env, caches, and runtime data
+├── REVIEW.md                    # Running 16-point defects & resolution log
+├── DECISIONS.md                 # Architecture, MongoDB indexing, & technical interview guide
+└── README.md                    # Primary project documentation
+```
+
+---
+
 ## 🚀 Key Architectural & Business Rules
 
 ### 1. Strict Validation & Boundary Conversion
