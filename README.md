@@ -84,6 +84,9 @@ Smart-Attendance/
 ├── app/
 │   ├── __init__.py              # Python package root
 │   └── main.py                  # API service: config, lifespan, pure rules, models, pipelines, & routes
+├── sample_data/                 # Sample data & database seeding scripts
+│   ├── sample_data.json         # Realistic sample employees & attendance records
+│   └── seed.py                  # One-command MongoDB sample data seeder
 ├── static/                      # Frontend UI assets (served at GET /)
 │   ├── css/
 │   │   └── style.css            # Dark-mode styles & layout
@@ -96,12 +99,14 @@ Smart-Attendance/
 ├── docs/                        # Project documentation screenshots
 │   ├── dashboard.png            # Live Punch Desk & status banner preview
 │   └── employees_directory.png  # Employee Directory view preview
+├── openapi.yaml                 # Complete OpenAPI 3.1 contract specification
+├── DATA_MODEL.md                # Comprehensive MongoDB collection schemas & index guide
+├── REVIEW.md                    # Starter defects log and review
+├── DECISIONS.md                 # Architecture, indexing, & design decisions
 ├── pytest.ini                   # Pytest test discovery & warning filters
 ├── requirements.txt             # Project and test dependencies
 ├── .env.example                 # Safe environment configuration template
 ├── .gitignore                   # Excludes venv/, .env, caches, and runtime data
-├── REVIEW.md                    # Starter defects log and review
-├── DECISIONS.md                 # Architecture, indexing, & design decisions
 └── README.md                    # Primary project documentation
 ```
 

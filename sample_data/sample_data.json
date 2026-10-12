@@ -1,0 +1,217 @@
+{
+  "employees": [
+    {
+      "emp_code": "EMP1001",
+      "name": "Aarav Sharma",
+      "email": "aarav.sharma@example.com",
+      "department": "Engineering",
+      "shift_start": "09:30",
+      "shift_end": "18:30",
+      "joined_on": "2026-01-05"
+    },
+    {
+      "emp_code": "EMP1002",
+      "name": "Diya Patel",
+      "email": "diya.patel@example.com",
+      "department": "Engineering",
+      "shift_start": "22:00",
+      "shift_end": "06:00",
+      "joined_on": "2026-01-10"
+    },
+    {
+      "emp_code": "EMP1003",
+      "name": "Rohan Iyer",
+      "email": "rohan.iyer@example.com",
+      "department": "Product",
+      "shift_start": "09:30",
+      "shift_end": "18:30",
+      "joined_on": "2026-02-01"
+    },
+    {
+      "emp_code": "EMP1004",
+      "name": "Ananya Sen",
+      "email": "ananya.sen@example.com",
+      "department": "Product",
+      "shift_start": "09:00",
+      "shift_end": "18:00",
+      "joined_on": "2026-03-16"
+    },
+    {
+      "emp_code": "EMP1005",
+      "name": "Vikram Malhotra",
+      "email": "vikram.m@example.com",
+      "department": "Design",
+      "shift_start": "10:00",
+      "shift_end": "19:00",
+      "joined_on": "2026-01-15"
+    },
+    {
+      "emp_code": "EMP1006",
+      "name": "Pooja Reddy",
+      "email": "pooja.reddy@example.com",
+      "department": "Operations",
+      "shift_start": "08:00",
+      "shift_end": "17:00",
+      "joined_on": "2026-01-20"
+    },
+    {
+      "emp_code": "EMP1007",
+      "name": "Karan Nair",
+      "email": "karan.nair@example.com",
+      "department": "HR",
+      "shift_start": "09:30",
+      "shift_end": "18:30",
+      "joined_on": "2026-02-15"
+    }
+  ],
+  "attendance_logs": [
+    {
+      "emp_code": "EMP1001",
+      "date": "2026-03-02",
+      "status": "PRESENT",
+      "punch_in_iso": "2026-03-02T04:00:00.000Z",
+      "punch_out_iso": "2026-03-02T13:00:00.000Z",
+      "work_hours": 9.00,
+      "late_minutes": 0,
+      "overtime_minutes": 0,
+      "half_day": false,
+      "history": []
+    },
+    {
+      "emp_code": "EMP1001",
+      "date": "2026-03-03",
+      "status": "PRESENT",
+      "punch_in_iso": "2026-03-03T04:15:00.000Z",
+      "punch_out_iso": "2026-03-03T13:45:00.000Z",
+      "work_hours": 9.50,
+      "late_minutes": 15,
+      "overtime_minutes": 45,
+      "half_day": false,
+      "history": []
+    },
+    {
+      "emp_code": "EMP1001",
+      "date": "2026-03-04",
+      "status": "WFH",
+      "punch_in_iso": "2026-03-04T04:00:00.000Z",
+      "punch_out_iso": "2026-03-04T08:15:00.000Z",
+      "work_hours": 4.25,
+      "late_minutes": 0,
+      "overtime_minutes": 0,
+      "half_day": true,
+      "history": []
+    },
+    {
+      "emp_code": "EMP1001",
+      "date": "2026-03-05",
+      "status": "PRESENT",
+      "punch_in_iso": "2026-03-05T04:00:00.000Z",
+      "punch_out_iso": "2026-03-05T13:00:00.000Z",
+      "work_hours": 9.00,
+      "late_minutes": 0,
+      "overtime_minutes": 0,
+      "half_day": false,
+      "history": [
+        {
+          "at": 1772719200000,
+          "by": "MGR001",
+          "reason": "Corrected punch-out timestamp missed due to badge reader glitch",
+          "changes": {
+            "punch_out": {
+              "from": null,
+              "to": 1772715600000
+            },
+            "work_hours": {
+              "from": null,
+              "to": 9.00
+            }
+          }
+        }
+      ]
+    },
+    {
+      "emp_code": "EMP1002",
+      "date": "2026-03-02",
+      "status": "PRESENT",
+      "punch_in_iso": "2026-03-02T16:30:00.000Z",
+      "punch_out_iso": "2026-03-03T01:00:00.000Z",
+      "work_hours": 8.50,
+      "late_minutes": 0,
+      "overtime_minutes": 30,
+      "half_day": false,
+      "history": []
+    },
+    {
+      "emp_code": "EMP1002",
+      "date": "2026-03-03",
+      "status": "PRESENT",
+      "punch_in_iso": "2026-03-03T16:45:00.000Z",
+      "punch_out_iso": "2026-03-04T00:30:00.000Z",
+      "work_hours": 7.75,
+      "late_minutes": 15,
+      "overtime_minutes": 0,
+      "half_day": false,
+      "history": []
+    },
+    {
+      "emp_code": "EMP1003",
+      "date": "2026-03-02",
+      "status": "PRESENT",
+      "punch_in_iso": "2026-03-02T04:20:00.000Z",
+      "punch_out_iso": "2026-03-02T13:00:00.000Z",
+      "work_hours": 8.67,
+      "late_minutes": 20,
+      "overtime_minutes": 0,
+      "half_day": false,
+      "history": []
+    },
+    {
+      "emp_code": "EMP1004",
+      "date": "2026-03-16",
+      "status": "PRESENT",
+      "punch_in_iso": "2026-03-16T03:30:00.000Z",
+      "punch_out_iso": "2026-03-16T12:30:00.000Z",
+      "work_hours": 9.00,
+      "late_minutes": 0,
+      "overtime_minutes": 0,
+      "half_day": false,
+      "history": []
+    },
+    {
+      "emp_code": "EMP1005",
+      "date": "2026-03-02",
+      "status": "ON_DUTY",
+      "punch_in_iso": "2026-03-02T04:30:00.000Z",
+      "punch_out_iso": "2026-03-02T13:30:00.000Z",
+      "work_hours": 9.00,
+      "late_minutes": 0,
+      "overtime_minutes": 0,
+      "half_day": false,
+      "history": []
+    },
+    {
+      "emp_code": "EMP1006",
+      "date": "2026-03-02",
+      "status": "PRESENT",
+      "punch_in_iso": "2026-03-02T02:30:00.000Z",
+      "punch_out_iso": "2026-03-02T11:30:00.000Z",
+      "work_hours": 9.00,
+      "late_minutes": 0,
+      "overtime_minutes": 0,
+      "half_day": false,
+      "history": []
+    },
+    {
+      "emp_code": "EMP1007",
+      "date": "2026-03-02",
+      "status": "LEAVE",
+      "punch_in_iso": null,
+      "punch_out_iso": null,
+      "work_hours": null,
+      "late_minutes": 0,
+      "overtime_minutes": 0,
+      "half_day": false,
+      "history": []
+    }
+  ]
+}

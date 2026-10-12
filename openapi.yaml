@@ -1,0 +1,1144 @@
+openapi: 3.1.0
+info:
+  title: Smart-Attendance API
+  version: 1.0.0
+  description: Employee Attendance & Analytics API with MongoDB indexing, business
+    rules (R1-R5, R8), and analytics aggregation pipelines.
+paths:
+  /:
+    get:
+      summary: Serve Frontend
+      description: 'GET /: Serves the Smart Attendance dashboard UI.'
+      operationId: serve_frontend__get
+      responses:
+        '200':
+          description: Successful Response
+  /health:
+    get:
+      summary: Health
+      description: GET /health returns 200 {"status":"ok"} only if Mongo ping succeeds,
+        else 503.
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /employees:
+    post:
+      summary: Create Employee
+      description: 'POST /employees: 201; 409 on duplicate emp_code enforced by UNIQUE
+        INDEX
+
+        (catch DuplicateKeyError, no check-then-insert); 422 invalid; returns created_at
+        as epoch ms.'
+      operationId: create_employee_employees_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      summary: Get Employees
+      description: 'GET /employees: optional department (exact), sorted by emp_code,
+        paginated, total = filtered count.'
+      operationId: get_employees_employees_get
+      parameters:
+      - name: department
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Department name (exact match)
+          title: Department
+        description: Department name (exact match)
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          description: Page number
+          default: 1
+          title: Page
+        description: Page number
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          description: Page size
+          default: 20
+          title: Page Size
+        description: Page size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEmployeesResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /attendance/punch-in:
+    post:
+      summary: Punch In
+      description: 'POST /attendance/punch-in {emp_code, punched_at?, status?}:
+
+        only PRESENT/WFH/ON_DUTY; 404 unknown employee; 409 duplicate (unique index
+        on (emp_code,date),
+
+        insert and catch DuplicateKeyError; exactly one 201 under concurrency); 422
+        invalid.
+
+        Initial doc: punch_out null, work_hours null, overtime 0, half_day false,
+        history [].'
+      operationId: punch_in_attendance_punch_in_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PunchInRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /attendance/punch-out:
+    post:
+      summary: Punch Out
+      description: 'POST /attendance/punch-out {emp_code, punched_at?}:
+
+        find the employee''s most recent record with punch_in <= punched_at (works
+        across midnight).
+
+        404 unknown employee or no punch-in;
+
+        409 if already punched out (atomic update_one with punch_out:None in the filter;
+        zero matches -> 409; exactly one 200 under concurrency);
+
+        422 if punched_at <= punch_in or > 24h after it. Compute R3-R5.'
+      operationId: punch_out_attendance_punch_out_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PunchOutRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /attendance:
+    get:
+      summary: Get Attendance
+      description: 'GET /attendance: filters emp_code, date_from, date_to (inclusive;
+        from > to -> 422), status;
+
+        sort date desc then emp_code asc; paginated; DB-side sort/skip/limit only;
+        must be fast at 100k docs.'
+      operationId: get_attendance_attendance_get
+      parameters:
+      - name: emp_code
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Employee code filter
+          title: Emp Code
+        description: Employee code filter
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Start date YYYY-MM-DD
+          title: Date From
+        description: Start date YYYY-MM-DD
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: End date YYYY-MM-DD
+          title: Date To
+        description: End date YYYY-MM-DD
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - PRESENT
+            - WFH
+            - ON_DUTY
+            - ABSENT
+            - LEAVE
+            type: string
+          - type: 'null'
+          description: Status filter
+          title: Status
+        description: Status filter
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          description: Page number
+          default: 1
+          title: Page
+        description: Page number
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          description: Page size
+          default: 20
+          title: Page Size
+        description: Page size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAttendanceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /attendance/{emp_code}/{date}:
+    patch:
+      summary: Patch Attendance
+      description: 'PATCH /attendance/{emp_code}/{date}:
+
+        body {status?, punch_in?, punch_out?, reason (5-200 chars), regularized_by
+        (1-50 chars)}.
+
+        Omitted fields unchanged. ABSENT/LEAVE clears both punches (supplying punches
+        with them -> 422).
+
+        Presence status requires punch_in (supplied or stored). punch_in must stay
+        on the record''s attendance date per R1.
+
+        punch_out > punch_in and within 24h. A request that changes nothing -> 422.
+        404 if employee or record missing.
+
+        Recompute all derived fields, append exactly ONE history entry {at, by, reason,
+        changes}
+
+        where changes holds only fields that actually changed as {from, to}.
+
+        Concurrency: compare-and-set on history length, retry a few times, then 409;
+        never lose history entries.'
+      operationId: patch_attendance_attendance__emp_code___date__patch
+      parameters:
+      - name: emp_code
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Emp Code
+      - name: date
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttendancePatchRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analytics/employees/{emp_code}/monthly:
+    get:
+      summary: Get Employee Monthly Analytics
+      description: 'GET /analytics/employees/{emp_code}/monthly?month:
+
+        working_days, present_days (half day 0.5, Mon-Fri only), leave_days, late_count,
+
+        total_late_minutes, total_overtime_minutes, attendance_pct (present/working*100,
+        null if working_days is 0).
+
+        404 unknown employee. Use an aggregation pipeline.'
+      operationId: get_employee_monthly_analytics_analytics_employees__emp_code__monthly_get
+      parameters:
+      - name: emp_code
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Emp Code
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Month in YYYY-MM format
+          title: Month
+        description: Month in YYYY-MM format
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeMonthlyAnalyticsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analytics/departments/summary:
+    get:
+      summary: Get Departments Summary
+      description: 'GET /analytics/departments/summary?month&department?:
+
+        one item per department sorted by department; headcount (R9, includes zero-log
+        employees, excludes future joiners);
+
+        present_days; avg_work_hours (mean over present-status records having work_hours,
+        computed as sum/count across records, null if none);
+
+        late_count; total_late_minutes; leave_count; on_duty_count. Omit departments
+        with headcount 0.
+
+        Start the pipeline from employees and $lookup logs so zero-log employees are
+        not dropped.'
+      operationId: get_departments_summary_analytics_departments_summary_get
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Month in YYYY-MM format
+          title: Month
+        description: Month in YYYY-MM format
+      - name: department
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Optional department filter
+          title: Department
+        description: Optional department filter
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartmentSummaryItem'
+                title: Response Get Departments Summary Analytics Departments Summary
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analytics/leaderboard/late:
+    get:
+      summary: Get Late Leaderboard
+      description: 'GET /analytics/leaderboard/late?month&limit(1-50, default 10)&department?:
+
+        total late_minutes per employee (> 0 only), employee data from employees (ignore
+        orphan logs),
+
+        standard competition ranking via $setWindowFields $rank (1,2,2,4), apply department
+        filter BEFORE ranking,
+
+        limit applies AFTER ranking (rank <= limit, may return more than limit rows),
+        order by total desc then emp_code asc.'
+      operationId: get_late_leaderboard_analytics_leaderboard_late_get
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Month in YYYY-MM format
+          title: Month
+        description: Month in YYYY-MM format
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          description: Max rank limit
+          default: 10
+          title: Limit
+        description: Max rank limit
+      - name: department
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Optional department filter
+          title: Department
+        description: Optional department filter
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LateLeaderboardItem'
+                title: Response Get Late Leaderboard Analytics Leaderboard Late Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /analytics/departments/{department}/trend:
+    get:
+      summary: Get Department Trend
+      description: 'GET /analytics/departments/{department}/trend?from&to:
+
+        exactly one row per calendar day in [from,to] including weekends and empty
+        days (use $densify, no Python loops).
+
+        Fields: date, is_working_day (Mon-Fri), headcount (joined_on <= day), present_count
+        (half day 0.5, any weekday/weekend),
+
+        late_count, attendance_rate (present/headcount, 4 dp half-up, only on working
+        days with headcount > 0 else null; working day with no records = 0.0),
+
+        moving_avg_7d (mean of non-null rates over current + up to 6 preceding rows
+        inside the range, null if none, 4 dp half-up, via $setWindowFields).
+
+        404 if the department has no employees; 422 if to < from or range > 92 days.'
+      operationId: get_department_trend_analytics_departments__department__trend_get
+      parameters:
+      - name: department
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Department
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Start date YYYY-MM-DD
+          title: From
+        description: Start date YYYY-MM-DD
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          description: End date YYYY-MM-DD
+          title: To
+        description: End date YYYY-MM-DD
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartmentTrendItem'
+                title: Response Get Department Trend Analytics Departments  Department  Trend
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /admin/explain/{endpoint}:
+    get:
+      summary: Explain Endpoint
+      description: 'GET /admin/explain/{endpoint}:
+
+        endpoint in attendance_list, employee_monthly, department_summary, late_leaderboard,
+        department_trend.
+
+        Same query params as the real endpoint; missing required -> 422.
+
+        Build the query/pipeline with the SAME builder functions the real endpoint
+        uses,
+
+        run explain with executionStats, return {"endpoint","collection","explain"}
+        (JSON-safe via bson.json_util).
+
+        Plans must show IXSCAN and no COLLSCAN on ~100k records (use hint if needed).'
+      operationId: explain_endpoint_admin_explain__endpoint__get
+      parameters:
+      - name: endpoint
+        in: path
+        required: true
+        schema:
+          enum:
+          - attendance_list
+          - employee_monthly
+          - department_summary
+          - late_leaderboard
+          - department_trend
+          type: string
+          title: Endpoint
+      - name: emp_code
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Employee code
+          title: Emp Code
+        description: Employee code
+      - name: month
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Month in YYYY-MM format
+          title: Month
+        description: Month in YYYY-MM format
+      - name: department
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Department name
+          title: Department
+        description: Department name
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Start date YYYY-MM-DD for attendance list
+          title: Date From
+        description: Start date YYYY-MM-DD for attendance list
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: End date YYYY-MM-DD for attendance list
+          title: Date To
+        description: End date YYYY-MM-DD for attendance list
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - PRESENT
+            - WFH
+            - ON_DUTY
+            - ABSENT
+            - LEAVE
+            type: string
+          - type: 'null'
+          description: Status filter
+          title: Status
+        description: Status filter
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 50
+            minimum: 1
+          - type: 'null'
+          description: Rank limit for late leaderboard
+          default: 10
+          title: Limit
+        description: Rank limit for late leaderboard
+      - name: from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Start date YYYY-MM-DD for trend
+          title: From
+        description: Start date YYYY-MM-DD for trend
+      - name: to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: End date YYYY-MM-DD for trend
+          title: To
+        description: End date YYYY-MM-DD for trend
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AttendancePatchRequest:
+      properties:
+        status:
+          anyOf:
+          - type: string
+            enum:
+            - PRESENT
+            - WFH
+            - ON_DUTY
+            - ABSENT
+            - LEAVE
+          - type: 'null'
+          title: Status
+        punch_in:
+          anyOf:
+          - type: integer
+            maximum: 4102444800000.0
+            minimum: 100000000000.0
+          - type: 'null'
+          title: Punch In
+        punch_out:
+          anyOf:
+          - type: integer
+            maximum: 4102444800000.0
+            minimum: 100000000000.0
+          - type: 'null'
+          title: Punch Out
+        reason:
+          type: string
+          maxLength: 200
+          minLength: 5
+          title: Reason
+        regularized_by:
+          type: string
+          maxLength: 50
+          minLength: 1
+          title: Regularized By
+      type: object
+      required:
+      - reason
+      - regularized_by
+      title: AttendancePatchRequest
+      example:
+        reason: Corrected missed punch by manager
+        regularized_by: MGR001
+        status: PRESENT
+    AttendanceResponse:
+      properties:
+        emp_code:
+          type: string
+          title: Emp Code
+        date:
+          type: string
+          title: Date
+        status:
+          type: string
+          title: Status
+        punch_in:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Punch In
+        punch_out:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Punch Out
+        work_hours:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Work Hours
+        late_minutes:
+          type: integer
+          title: Late Minutes
+        overtime_minutes:
+          type: integer
+          title: Overtime Minutes
+        half_day:
+          type: boolean
+          title: Half Day
+        history:
+          items:
+            $ref: '#/components/schemas/HistoryItem'
+          type: array
+          title: History
+          default: []
+      type: object
+      required:
+      - emp_code
+      - date
+      - status
+      - late_minutes
+      - overtime_minutes
+      - half_day
+      title: AttendanceResponse
+    DepartmentSummaryItem:
+      properties:
+        department:
+          type: string
+          title: Department
+        headcount:
+          type: integer
+          title: Headcount
+        present_days:
+          type: number
+          title: Present Days
+        avg_work_hours:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Avg Work Hours
+        late_count:
+          type: integer
+          title: Late Count
+        total_late_minutes:
+          type: integer
+          title: Total Late Minutes
+        leave_count:
+          type: integer
+          title: Leave Count
+        on_duty_count:
+          type: integer
+          title: On Duty Count
+      type: object
+      required:
+      - department
+      - headcount
+      - present_days
+      - late_count
+      - total_late_minutes
+      - leave_count
+      - on_duty_count
+      title: DepartmentSummaryItem
+    DepartmentTrendItem:
+      properties:
+        date:
+          type: string
+          title: Date
+        is_working_day:
+          type: boolean
+          title: Is Working Day
+        headcount:
+          type: integer
+          title: Headcount
+        present_count:
+          type: number
+          title: Present Count
+        late_count:
+          type: integer
+          title: Late Count
+        attendance_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Attendance Rate
+        moving_avg_7d:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Moving Avg 7D
+      type: object
+      required:
+      - date
+      - is_working_day
+      - headcount
+      - present_count
+      - late_count
+      title: DepartmentTrendItem
+    EmployeeCreate:
+      properties:
+        emp_code:
+          type: string
+          title: Emp Code
+          description: Unique employee code, e.g. EMP1001
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Name
+        email:
+          type: string
+          title: Email
+          description: Employee email address
+        department:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Department
+        shift_start:
+          type: string
+          title: Shift Start
+          default: 09:30
+        shift_end:
+          type: string
+          title: Shift End
+          default: '18:30'
+        joined_on:
+          type: string
+          title: Joined On
+          description: YYYY-MM-DD
+      type: object
+      required:
+      - emp_code
+      - name
+      - email
+      - department
+      - joined_on
+      title: EmployeeCreate
+      example:
+        department: Engineering
+        email: alice@example.com
+        emp_code: EMP1001
+        joined_on: '2026-01-15'
+        name: Alice Smith
+        shift_end: '18:30'
+        shift_start: 09:30
+    EmployeeMonthlyAnalyticsResponse:
+      properties:
+        working_days:
+          type: integer
+          title: Working Days
+        present_days:
+          type: number
+          title: Present Days
+        leave_days:
+          type: integer
+          title: Leave Days
+        late_count:
+          type: integer
+          title: Late Count
+        total_late_minutes:
+          type: integer
+          title: Total Late Minutes
+        total_overtime_minutes:
+          type: integer
+          title: Total Overtime Minutes
+        attendance_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Attendance Pct
+      type: object
+      required:
+      - working_days
+      - present_days
+      - leave_days
+      - late_count
+      - total_late_minutes
+      - total_overtime_minutes
+      title: EmployeeMonthlyAnalyticsResponse
+    EmployeeResponse:
+      properties:
+        emp_code:
+          type: string
+          title: Emp Code
+        name:
+          type: string
+          title: Name
+        email:
+          type: string
+          title: Email
+        department:
+          type: string
+          title: Department
+        shift_start:
+          type: string
+          title: Shift Start
+        shift_end:
+          type: string
+          title: Shift End
+        joined_on:
+          type: string
+          title: Joined On
+        created_at:
+          type: integer
+          title: Created At
+      type: object
+      required:
+      - emp_code
+      - name
+      - email
+      - department
+      - shift_start
+      - shift_end
+      - joined_on
+      - created_at
+      title: EmployeeResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HistoryItem:
+      properties:
+        at:
+          type: integer
+          title: At
+        by:
+          type: string
+          title: By
+        reason:
+          type: string
+          title: Reason
+        changes:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          type: object
+          title: Changes
+      type: object
+      required:
+      - at
+      - by
+      - reason
+      - changes
+      title: HistoryItem
+    LateLeaderboardItem:
+      properties:
+        rank:
+          type: integer
+          title: Rank
+        emp_code:
+          type: string
+          title: Emp Code
+        name:
+          type: string
+          title: Name
+        department:
+          type: string
+          title: Department
+        total_late_minutes:
+          type: integer
+          title: Total Late Minutes
+        late_count:
+          type: integer
+          title: Late Count
+      type: object
+      required:
+      - rank
+      - emp_code
+      - name
+      - department
+      - total_late_minutes
+      - late_count
+      title: LateLeaderboardItem
+    PaginatedAttendanceResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AttendanceResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        page_size:
+          type: integer
+          title: Page Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - page_size
+      title: PaginatedAttendanceResponse
+    PaginatedEmployeesResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/EmployeeResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        page_size:
+          type: integer
+          title: Page Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - page_size
+      title: PaginatedEmployeesResponse
+    PunchInRequest:
+      properties:
+        emp_code:
+          type: string
+          title: Emp Code
+        punched_at:
+          anyOf:
+          - type: integer
+            maximum: 4102444800000.0
+            minimum: 100000000000.0
+          - type: 'null'
+          title: Punched At
+        status:
+          anyOf:
+          - type: string
+            enum:
+            - PRESENT
+            - WFH
+            - ON_DUTY
+          - type: 'null'
+          title: Status
+          default: PRESENT
+      type: object
+      required:
+      - emp_code
+      title: PunchInRequest
+      example:
+        emp_code: EMP1001
+        status: PRESENT
+    PunchOutRequest:
+      properties:
+        emp_code:
+          type: string
+          title: Emp Code
+        punched_at:
+          anyOf:
+          - type: integer
+            maximum: 4102444800000.0
+            minimum: 100000000000.0
+          - type: 'null'
+          title: Punched At
+      type: object
+      required:
+      - emp_code
+      title: PunchOutRequest
+      example:
+        emp_code: EMP1001
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
