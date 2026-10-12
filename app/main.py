@@ -16,7 +16,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
@@ -41,6 +41,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 # Regex patterns
 EMP_CODE_REGEX = re.compile(r"^EMP\d{4,6}$")
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 DATE_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MONTH_REGEX = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 TIME_REGEX = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -101,13 +102,13 @@ def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
-@app.exception_handler(Exception)
-def global_exception_handler(request: Request, exc: Exception):
-    # Rule: A 500 is never acceptable. Return 503 on unexpected DB/service failures.
-    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+@app.exception_handler(PyMongoError)
+def mongo_exception_handler(request: Request, exc: PyMongoError):
+    # Map real database connection/runtime errors to 503 Service Unavailable
+    logger.error(f"MongoDB error on {request.method} {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
-        status_code=503,
-        content={"detail": "Service temporarily unavailable"},
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "Database unavailable"},
     )
 
 
@@ -334,7 +335,7 @@ StrictEpochMs = Annotated[int, Field(strict=True, ge=100_000_000_000, le=4_102_4
 class EmployeeCreate(BaseModel):
     emp_code: str = Field(..., description="Unique employee code, e.g. EMP1001")
     name: str = Field(..., min_length=1, max_length=100)
-    email: EmailStr
+    email: str = Field(..., description="Employee email address")
     department: str = Field(..., min_length=1, max_length=100)
     shift_start: str = Field(default="09:30")
     shift_end: str = Field(default="18:30")
@@ -345,6 +346,13 @@ class EmployeeCreate(BaseModel):
     def validate_emp_code(cls, v: str) -> str:
         if not EMP_CODE_REGEX.match(v):
             raise ValueError("emp_code must match pattern ^EMP\\d{4,6}$")
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if not EMAIL_REGEX.match(v):
+            raise ValueError("Invalid email format")
         return v
 
     @field_validator("shift_start", "shift_end")
@@ -1232,6 +1240,7 @@ def get_attendance(
     cursor = (
         db.attendance_logs.find(query, {"_id": 0})
         .sort([("date", -1), ("emp_code", 1)])
+        .hint("idx_date_desc_emp_code")
         .skip(skip)
         .limit(page_size)
     )
@@ -1431,7 +1440,7 @@ def get_employee_monthly_analytics(
 
     # Run aggregation pipeline on attendance_logs
     pipeline = build_employee_monthly_pipeline(emp_code, start_date_str, end_date_str)
-    res = list(db.attendance_logs.aggregate(pipeline))
+    res = list(db.attendance_logs.aggregate(pipeline, hint="uniq_emp_code_date"))
 
     if res:
         doc = res[0]
@@ -1478,7 +1487,8 @@ def get_departments_summary(
     start_date_str, end_date_str, _, _ = get_month_bounds(month)
 
     pipeline = build_department_summary_pipeline(start_date_str, end_date_str, department)
-    results = list(db.employees.aggregate(pipeline))
+    hint = "idx_dept_joined_on" if department else "idx_joined_on"
+    results = list(db.employees.aggregate(pipeline, hint=hint))
 
     output = []
     for doc in results:
@@ -1524,7 +1534,7 @@ def get_late_leaderboard(
     start_date_str, end_date_str, _, _ = get_month_bounds(month)
 
     pipeline = build_late_leaderboard_pipeline(start_date_str, end_date_str, limit, department)
-    results = list(db.attendance_logs.aggregate(pipeline))
+    results = list(db.attendance_logs.aggregate(pipeline, hint="idx_date_late_emp"))
 
     return results
 
@@ -1570,7 +1580,7 @@ def get_department_trend(
         raise HTTPException(status_code=404, detail=f"Department '{department}' not found or has no employees")
 
     pipeline = build_department_trend_pipeline(department, from_date, to_date)
-    results = list(db.employees.aggregate(pipeline))
+    results = list(db.employees.aggregate(pipeline, hint="idx_dept_emp_code"))
 
     output = []
     for item in results:
