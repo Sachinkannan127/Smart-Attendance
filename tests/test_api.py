@@ -3,17 +3,42 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
 
+import os
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app, db
+import app.main as main_mod
+from app.main import app
+
+# Isolate tests to a dedicated test database so development/Atlas data in 'attendance_db' is never deleted
+TEST_DB_NAME = os.getenv("MONGO_TEST_DB", "attendance_test_db")
+main_mod.db = main_mod.client[TEST_DB_NAME]
+db = main_mod.db
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
 
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_indexes():
+    """Ensure indexes exist on test database."""
+    try:
+        db.employees.create_index([("emp_code", 1)], unique=True, name="uniq_emp_code")
+        db.employees.create_index([("department", 1), ("emp_code", 1)], name="idx_dept_emp_code")
+        db.employees.create_index([("department", 1), ("joined_on", 1)], name="idx_dept_joined_on")
+        db.employees.create_index([("joined_on", 1)], name="idx_joined_on")
+
+        db.attendance_logs.create_index([("emp_code", 1), ("date", 1)], unique=True, name="uniq_emp_code_date")
+        db.attendance_logs.create_index([("date", -1), ("emp_code", 1)], name="idx_date_desc_emp_code")
+        db.attendance_logs.create_index([("date", 1), ("late_minutes", 1), ("emp_code", 1)], name="idx_date_late_emp")
+        db.attendance_logs.create_index([("emp_code", 1), ("punch_in", -1)], name="idx_emp_punch_in_desc")
+    except Exception:
+        pass
+    yield
+
+
 @pytest.fixture(autouse=True)
 def clean_db():
-    """Ensure clean collections for each test."""
+    """Ensure clean collections for each test in test database."""
     db.employees.delete_many({})
     db.attendance_logs.delete_many({})
     yield
